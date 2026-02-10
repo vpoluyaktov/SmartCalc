@@ -128,6 +128,12 @@ A powerful, multi-purpose calculator application with support for mathematical e
 - Shows reason phrase, category, and description
 - Covers 1xx–5xx including WebDAV and fun codes like `http code 418`
 
+#### HTTP Client (curl -I)
+- Perform HTTP HEAD requests: `http google.com`, `curl github.com`
+- Supports full URLs: `http https://example.com`, `curl http://httpbin.org`
+- Shows response status line and all headers (like `curl -I`)
+- Priority headers (Location, Content-Type, Server, etc.) shown first
+
 ### JWT Decoder
 - Decode JWT tokens: `jwt decode <token>` or `jwt <token>`
 - Shows header (algorithm, type)
@@ -321,6 +327,21 @@ http code 500 = 500 Internal Server Error (Server Error) — The server encounte
 http code 301 = 301 Moved Permanently (Redirection) — The resource has been permanently moved to a new URL
 http code 418 = 418 I'm a Teapot (Client Error) — The server refuses to brew coffee because it is, permanently, a teapot
 http code 429 = 429 Too Many Requests (Client Error) — The user has sent too many requests in a given amount of time
+
+## HTTP Client (curl -I)
+http google.com =
+> HTTP/1.1 301 Moved Permanently
+> Location: http://www.google.com/
+> Content-Type: text/html; charset=UTF-8
+> Server: gws
+> Content-Length: 219
+> Date: Tue, 10 Feb 2026 21:46:34 GMT
+
+curl github.com =
+> HTTP/2.0 301 Moved Permanently
+> Location: https://github.com/
+> Content-Type: text/html
+> Server: GitHub.com
 
 # JWT Decoder
 jwt decode eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig =

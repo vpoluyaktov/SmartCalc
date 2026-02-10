@@ -15,6 +15,7 @@ import (
 	"smartcalc/internal/eval"
 	"smartcalc/internal/finance"
 	"smartcalc/internal/hourlycost"
+	"smartcalc/internal/httpclient"
 	"smartcalc/internal/httpstatus"
 	"smartcalc/internal/jwt"
 	"smartcalc/internal/manhour"
@@ -602,6 +603,39 @@ func EvalLines(lines []string, activeLineNum int) []LineResult {
 			whoisResult, err := network.EvalWhois(expr)
 			if err == nil {
 				results[i].Output = expr + " =\n" + whoisResult + inlineComment
+				results[i].HasResult = true
+				continue
+			} else {
+				results[i].Output = expr + " = ERR: " + err.Error() + inlineComment
+				results[i].HasResult = true
+				continue
+			}
+		}
+
+		// Try HTTP client (HEAD request, like curl -I)
+		// Note: Don't use maybeFormat for HTTP client expressions as URLs should not be modified
+		// Skip re-evaluation if line already has a result and is not the active line (expensive network operation)
+		if httpclient.IsHTTPClientExpression(expr) {
+			isActiveLine := activeLineNum > 0 && i+1 == activeLineNum
+
+			// Check if line already has an inline result (like "ERR: ..." after =)
+			existingResult := strings.TrimSpace(workingLine[eq+1:])
+			if existingResult != "" && !isActiveLine {
+				results[i].Output = line
+				results[i].HasResult = true
+				continue
+			}
+
+			// Check if line had multi-line output
+			if outputLines, ok := hasMultiLineOutput[i]; ok && !isActiveLine {
+				results[i].Output = line + "\n" + strings.Join(outputLines, "\n")
+				results[i].HasResult = true
+				continue
+			}
+
+			httpResult, err := httpclient.EvalHTTPClient(expr)
+			if err == nil {
+				results[i].Output = expr + " =\n" + httpResult + inlineComment
 				results[i].HasResult = true
 				continue
 			} else {

@@ -166,6 +166,14 @@ func GetSnippetCategories() []SnippetCategory {
 			},
 		},
 		{
+			Name: "HTTP Client",
+			Snippets: []Snippet{
+				{"HEAD Request", "http google.com =\nhttp github.com =\n\n"},
+				{"With Scheme", "http https://example.com =\nhttp http://httpbin.org =\n\n"},
+				{"Curl Style", "curl google.com =\ncurl github.com =\n\n"},
+			},
+		},
+		{
 			Name: "JWT Decoder",
 			Snippets: []Snippet{
 				{"Decode JWT Token", "jwt decode eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c =\n\n"},
