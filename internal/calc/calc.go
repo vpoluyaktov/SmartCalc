@@ -10,6 +10,7 @@ import (
 	"smartcalc/internal/color"
 	"smartcalc/internal/constants"
 	"smartcalc/internal/cooking"
+	"smartcalc/internal/crontab"
 	"smartcalc/internal/datetime"
 	"smartcalc/internal/eval"
 	"smartcalc/internal/finance"
@@ -441,6 +442,16 @@ func EvalLines(lines []string, activeLineNum int) []LineResult {
 			permResult, err := permissions.EvalPermissions(expr)
 			if err == nil {
 				results[i].Output = maybeFormat(i, expr) + " = " + permResult + inlineComment
+				results[i].HasResult = true
+				continue
+			}
+		}
+
+		// Try crontab explanation
+		if crontab.IsCrontabExpression(expr) {
+			cronResult, err := crontab.EvalCrontab(expr)
+			if err == nil {
+				results[i].Output = maybeFormat(i, expr) + " = " + cronResult + inlineComment
 				results[i].HasResult = true
 				continue
 			}
