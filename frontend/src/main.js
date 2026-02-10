@@ -377,12 +377,21 @@ async function handleEnterKeyAsync(view, lineNumber, alreadyAddedEquals) {
         // Evaluate the line
         await evaluateAndUpdate(lineNumber);
         
-        // Insert newline after the updated line
+        // Insert newline after the updated line (and any multi-line output lines)
         const newDoc = view.state.doc;
-        const updatedLine = newDoc.line(lineNumber);
+        let lastLine = newDoc.line(lineNumber);
+        // Skip past any output lines (starting with ">") that follow the expression
+        while (lastLine.number < newDoc.lines) {
+            const nextLine = newDoc.line(lastLine.number + 1);
+            if (nextLine.text.startsWith('>')) {
+                lastLine = nextLine;
+            } else {
+                break;
+            }
+        }
         view.dispatch({
-            changes: { from: updatedLine.to, insert: '\n' },
-            selection: { anchor: updatedLine.to + 1 },
+            changes: { from: lastLine.to, insert: '\n' },
+            selection: { anchor: lastLine.to + 1 },
         });
     } finally {
         isUpdatingEditor = false;
