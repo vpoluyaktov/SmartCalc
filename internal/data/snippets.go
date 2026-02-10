@@ -146,6 +146,16 @@ func GetSnippetCategories() []SnippetCategory {
 			},
 		},
 		{
+			Name: "Crontab Explanation",
+			Snippets: []Snippet{
+				{"Every N Minutes", "cron */5 * * * * =\ncron */15 * * * * =\n\n"},
+				{"Specific Time", "cron 0 0 * * * =\ncron 30 2 * * * =\ncron 0 9 * * * =\n\n"},
+				{"Weekdays Only", "cron 30 2 * * 1-5 =\ncron 0 9 * * 1,5 =\n\n"},
+				{"Monthly/Yearly", "cron 0 0 1 * * =\ncron 0 0 1 1 * =\n\n"},
+				{"Short Aliases", "cron @daily =\ncron @hourly =\ncron @weekly =\ncron @monthly =\ncron @yearly =\n\n"},
+			},
+		},
+		{
 			Name: "JWT Decoder",
 			Snippets: []Snippet{
 				{"Decode JWT Token", "jwt decode eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c =\n\n"},
