@@ -604,6 +604,7 @@ func TestAllSnippetCategoriesExist(t *testing.T) {
 		"Programmer",
 		"Regex Tester",
 		"Unix Permissions",
+		"Crontab Explanation",
 		"JWT Decoder",
 		"SSL Certificate",
 		"Networking Utilities",
