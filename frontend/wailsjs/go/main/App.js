@@ -82,6 +82,10 @@ export function ShowInfoDialog(arg1, arg2) {
   return window['go']['main']['App']['ShowInfoDialog'](arg1, arg2);
 }
 
+export function StripAllResults(arg1) {
+  return window['go']['main']['App']['StripAllResults'](arg1);
+}
+
 export function StripAndEvalReferencingLines(arg1) {
   return window['go']['main']['App']['StripAndEvalReferencingLines'](arg1);
 }

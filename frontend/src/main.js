@@ -4,7 +4,7 @@ import { EditorState, RangeSetBuilder } from '@codemirror/state';
 import { keymap, Decoration, ViewPlugin } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine } from '@codemirror/view';
-import { Evaluate, GetVersion, OpenFileDialog, SaveFileDialog, ReadFile, WriteFile, AddRecentFile, GetLastFile, AutoSave, AdjustReferences, CopyWithResolvedRefs, SetUnsavedState, Quit, StripLineResult, HasLineResult, EvaluateLines, StripAndEvalReferencingLines, GetGitHubRepoURL, CheckForUpdates, OpenURL } from '../wailsjs/go/main/App';
+import { Evaluate, GetVersion, OpenFileDialog, SaveFileDialog, ReadFile, WriteFile, AddRecentFile, GetLastFile, AutoSave, AdjustReferences, CopyWithResolvedRefs, SetUnsavedState, Quit, StripLineResult, HasLineResult, EvaluateLines, StripAllResults, StripAndEvalReferencingLines, GetGitHubRepoURL, CheckForUpdates, OpenURL } from '../wailsjs/go/main/App';
 import { EventsOn, ClipboardGetText, ClipboardSetText } from '../wailsjs/runtime/runtime';
 
 let editor;
@@ -853,6 +853,60 @@ async function evaluateContent() {
     }
 }
 
+// Recalculate all expressions - strips all results and re-evaluates everything
+async function recalculateAll() {
+    isUpdatingEditor = true;
+    try {
+        const text = editor.state.doc.toString();
+        const scrollTop = editor.scrollDOM.scrollTop;
+        const scrollLeft = editor.scrollDOM.scrollLeft;
+        const cursorPos = editor.state.selection.main.head;
+        const cursorLine = editor.state.doc.lineAt(cursorPos);
+        const lineNumber = cursorLine.number;
+        const columnOffset = cursorPos - cursorLine.from;
+        
+        // Strip all results and output lines
+        const strippedText = await StripAllResults(text);
+        
+        // Replace editor content with stripped text
+        editor.dispatch({
+            changes: { from: 0, to: editor.state.doc.length, insert: strippedText },
+        });
+        
+        // Now evaluate all expressions
+        const results = await Evaluate(strippedText, 0);
+        const newLines = results.map(r => r.output);
+        const newText = newLines.join('\n');
+        
+        editor.dispatch({
+            changes: { from: 0, to: editor.state.doc.length, insert: newText },
+        });
+        
+        // Restore cursor position
+        const newDoc = editor.state.doc;
+        if (lineNumber <= newDoc.lines) {
+            const newLine = newDoc.line(lineNumber);
+            const newPos = newLine.from + Math.min(columnOffset, newLine.length);
+            editor.dispatch({
+                selection: { anchor: newPos },
+            });
+        }
+        
+        // Restore scroll
+        requestAnimationFrame(() => {
+            editor.scrollDOM.scrollTop = scrollTop;
+            editor.scrollDOM.scrollLeft = scrollLeft;
+        });
+        
+        previousText = newText;
+        previousLineCount = newText.split('\n').length;
+    } catch (err) {
+        console.error('Recalculate error:', err);
+    } finally {
+        isUpdatingEditor = false;
+    }
+}
+
 // Internal evaluate function (does not manage flag)
 async function evaluateContentInternal() {
     const text = editor.state.doc.toString();
@@ -948,6 +1002,11 @@ function handleKeyboard(e) {
     if (e.ctrlKey && e.key === 'n') {
         e.preventDefault();
         newFile();
+    }
+    // Ctrl+R - Recalculate all expressions
+    if (e.ctrlKey && e.key === 'r') {
+        e.preventDefault();
+        recalculateAll();
     }
     // Ctrl+C - Smart Copy (replace refs with values)
     if (e.ctrlKey && e.key === 'c') {
@@ -1308,6 +1367,7 @@ https://github.com/vpoluyaktov/smartcalc
 Ctrl+N    New file
 Ctrl+O    Open file
 Ctrl+S    Save file
+Ctrl+R    Recalculate all expressions
 Ctrl+C    Copy (with resolved references)
 Ctrl+V    Paste
 Enter     Auto-append = and calculate`;

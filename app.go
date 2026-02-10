@@ -299,6 +299,11 @@ func (a *App) EvaluateLines(text string, changedLine int) []EvalResult {
 	return evalResults
 }
 
+// StripAllResults strips results from all expression lines and removes output lines
+func (a *App) StripAllResults(text string) string {
+	return calc.StripAllResults(text)
+}
+
 // StripAndEvalReferencingLines strips results from lines with references and re-evaluates them
 func (a *App) StripAndEvalReferencingLines(text string) string {
 	return calc.StripAndEvalReferencingLines(text)

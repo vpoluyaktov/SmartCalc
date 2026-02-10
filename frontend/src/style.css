@@ -41,6 +41,13 @@ html, body {
     margin-right: 12px;
 }
 
+#status-hint {
+    color: #000;
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin-right: 12px;
+}
+
 #status-right {
     display: flex;
     align-items: center;

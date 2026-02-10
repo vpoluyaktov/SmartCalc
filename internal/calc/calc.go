@@ -828,6 +828,26 @@ func EvalLinesSelective(lines []string, linesToEval []int) []LineResult {
 	return EvalLines(lines, 0)
 }
 
+// StripAllResults strips results from all expression lines and removes output lines (starting with '>').
+// This prepares the document for a full recalculation.
+func StripAllResults(text string) string {
+	lines := strings.Split(text, "\n")
+	var result []string
+	for _, line := range lines {
+		// Skip output lines
+		if strings.HasPrefix(line, ">") {
+			continue
+		}
+		// Strip result from expression lines
+		if HasResult(line) {
+			result = append(result, StripResult(line))
+		} else {
+			result = append(result, line)
+		}
+	}
+	return strings.Join(result, "\n")
+}
+
 // StripAndEvalReferencingLines strips results from all lines that contain references
 // and re-evaluates them. Returns the updated text.
 func StripAndEvalReferencingLines(text string) string {
