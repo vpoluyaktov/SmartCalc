@@ -122,6 +122,12 @@ A powerful, multi-purpose calculator application with support for mathematical e
 - Short aliases: `cron @daily`, `cron @hourly`, `cron @weekly`, `cron @monthly`, `cron @yearly`
 - Supports ranges, steps, and lists: `cron 30 2 * * 1-5`, `cron 0 9 * * 1,5`
 
+#### HTTP Status Codes
+- Look up any HTTP status code: `http 200`, `http 404`, `http 500`
+- Alternative syntax: `status code 404`, `http/1.1 200`
+- Shows reason phrase, category, and description
+- Covers 1xx–5xx including WebDAV and fun codes like `http 418`
+
 ### JWT Decoder
 - Decode JWT tokens: `jwt decode <token>` or `jwt <token>`
 - Shows header (algorithm, type)
@@ -307,6 +313,14 @@ cron 0 9 * * 1,5 = At 09:00, on Monday, Friday
 cron @daily = At 00:00 (0 0 * * *)
 cron @hourly = At minute 0 of every hour (0 * * * *)
 cron 0 0 1 1 * = At 00:00, on day 1, in January
+
+## HTTP Status Codes
+http 200 = 200 OK (Success) — The request has succeeded
+http 404 = 404 Not Found (Client Error) — The requested resource could not be found on the server
+http 500 = 500 Internal Server Error (Server Error) — The server encountered an unexpected condition
+http 301 = 301 Moved Permanently (Redirection) — The resource has been permanently moved to a new URL
+http 418 = 418 I'm a Teapot (Client Error) — The server refuses to brew coffee because it is, permanently, a teapot
+http 429 = 429 Too Many Requests (Client Error) — The user has sent too many requests in a given amount of time
 
 # JWT Decoder
 jwt decode eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig =
