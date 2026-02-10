@@ -158,11 +158,11 @@ func GetSnippetCategories() []SnippetCategory {
 		{
 			Name: "HTTP Status Codes",
 			Snippets: []Snippet{
-				{"Common Success", "http 200 =\nhttp 201 =\nhttp 204 =\n\n"},
-				{"Redirections", "http 301 =\nhttp 302 =\nhttp 304 =\nhttp 307 =\n\n"},
-				{"Client Errors", "http 400 =\nhttp 401 =\nhttp 403 =\nhttp 404 =\nhttp 429 =\n\n"},
-				{"Server Errors", "http 500 =\nhttp 502 =\nhttp 503 =\nhttp 504 =\n\n"},
-				{"Fun & Uncommon", "http 418 =\nhttp 451 =\nhttp 103 =\nhttp 426 =\n\n"},
+				{"Common Success", "http code 200 =\nhttp code 201 =\nhttp code 204 =\n\n"},
+				{"Redirections", "http code 301 =\nhttp code 302 =\nhttp code 304 =\nhttp code 307 =\n\n"},
+				{"Client Errors", "http code 400 =\nhttp code 401 =\nhttp code 403 =\nhttp code 404 =\nhttp code 429 =\n\n"},
+				{"Server Errors", "http code 500 =\nhttp code 502 =\nhttp code 503 =\nhttp code 504 =\n\n"},
+				{"Fun & Uncommon", "http code 418 =\nhttp code 451 =\nhttp code 103 =\nhttp code 426 =\n\n"},
 			},
 		},
 		{

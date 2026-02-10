@@ -88,8 +88,8 @@ var statusCodes = map[int]statusInfo{
 	511: {"Network Authentication Required", "The client needs to authenticate to gain network access"},
 }
 
-// Pattern: "http 404", "http status 404", "status code 404", "HTTP/1.1 404"
-var httpPattern = regexp.MustCompile(`(?i)^(?:http(?:/\d(?:\.\d)?)?|status\s+code)\s+(\d{3})$`)
+// Pattern: "http code 404", "http status 404", "status code 404"
+var httpPattern = regexp.MustCompile(`(?i)^(?:http\s+(?:code|status)|status\s+code)\s+(\d{3})$`)
 
 // IsHTTPStatusExpression checks if an expression looks like an HTTP status code query
 func IsHTTPStatusExpression(expr string) bool {

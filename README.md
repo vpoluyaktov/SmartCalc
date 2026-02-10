@@ -123,10 +123,10 @@ A powerful, multi-purpose calculator application with support for mathematical e
 - Supports ranges, steps, and lists: `cron 30 2 * * 1-5`, `cron 0 9 * * 1,5`
 
 #### HTTP Status Codes
-- Look up any HTTP status code: `http 200`, `http 404`, `http 500`
-- Alternative syntax: `status code 404`, `http/1.1 200`
+- Look up any HTTP status code: `http code 200`, `http code 404`, `http code 500`
+- Alternative syntax: `http status 404`, `status code 404`
 - Shows reason phrase, category, and description
-- Covers 1xx–5xx including WebDAV and fun codes like `http 418`
+- Covers 1xx–5xx including WebDAV and fun codes like `http code 418`
 
 ### JWT Decoder
 - Decode JWT tokens: `jwt decode <token>` or `jwt <token>`
@@ -315,12 +315,12 @@ cron @hourly = At minute 0 of every hour (0 * * * *)
 cron 0 0 1 1 * = At 00:00, on day 1, in January
 
 ## HTTP Status Codes
-http 200 = 200 OK (Success) — The request has succeeded
-http 404 = 404 Not Found (Client Error) — The requested resource could not be found on the server
-http 500 = 500 Internal Server Error (Server Error) — The server encountered an unexpected condition
-http 301 = 301 Moved Permanently (Redirection) — The resource has been permanently moved to a new URL
-http 418 = 418 I'm a Teapot (Client Error) — The server refuses to brew coffee because it is, permanently, a teapot
-http 429 = 429 Too Many Requests (Client Error) — The user has sent too many requests in a given amount of time
+http code 200 = 200 OK (Success) — The request has succeeded
+http code 404 = 404 Not Found (Client Error) — The requested resource could not be found on the server
+http code 500 = 500 Internal Server Error (Server Error) — The server encountered an unexpected condition
+http code 301 = 301 Moved Permanently (Redirection) — The resource has been permanently moved to a new URL
+http code 418 = 418 I'm a Teapot (Client Error) — The server refuses to brew coffee because it is, permanently, a teapot
+http code 429 = 429 Too Many Requests (Client Error) — The user has sent too many requests in a given amount of time
 
 # JWT Decoder
 jwt decode eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig =
