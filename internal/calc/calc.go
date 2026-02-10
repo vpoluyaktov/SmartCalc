@@ -15,6 +15,7 @@ import (
 	"smartcalc/internal/eval"
 	"smartcalc/internal/finance"
 	"smartcalc/internal/hourlycost"
+	"smartcalc/internal/httpstatus"
 	"smartcalc/internal/jwt"
 	"smartcalc/internal/manhour"
 	"smartcalc/internal/network"
@@ -452,6 +453,16 @@ func EvalLines(lines []string, activeLineNum int) []LineResult {
 			cronResult, err := crontab.EvalCrontab(expr)
 			if err == nil {
 				results[i].Output = maybeFormat(i, expr) + " = " + cronResult + inlineComment
+				results[i].HasResult = true
+				continue
+			}
+		}
+
+		// Try HTTP status code explanation
+		if httpstatus.IsHTTPStatusExpression(expr) {
+			httpResult, err := httpstatus.EvalHTTPStatus(expr)
+			if err == nil {
+				results[i].Output = maybeFormat(i, expr) + " = " + httpResult + inlineComment
 				results[i].HasResult = true
 				continue
 			}

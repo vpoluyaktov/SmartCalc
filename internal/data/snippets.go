@@ -156,6 +156,16 @@ func GetSnippetCategories() []SnippetCategory {
 			},
 		},
 		{
+			Name: "HTTP Status Codes",
+			Snippets: []Snippet{
+				{"Common Success", "http 200 =\nhttp 201 =\nhttp 204 =\n\n"},
+				{"Redirections", "http 301 =\nhttp 302 =\nhttp 304 =\nhttp 307 =\n\n"},
+				{"Client Errors", "http 400 =\nhttp 401 =\nhttp 403 =\nhttp 404 =\nhttp 429 =\n\n"},
+				{"Server Errors", "http 500 =\nhttp 502 =\nhttp 503 =\nhttp 504 =\n\n"},
+				{"Fun & Uncommon", "http 418 =\nhttp 451 =\nhttp 103 =\nhttp 426 =\n\n"},
+			},
+		},
+		{
 			Name: "JWT Decoder",
 			Snippets: []Snippet{
 				{"Decode JWT Token", "jwt decode eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c =\n\n"},
