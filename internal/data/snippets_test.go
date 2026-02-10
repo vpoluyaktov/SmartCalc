@@ -606,6 +606,7 @@ func TestAllSnippetCategoriesExist(t *testing.T) {
 		"Unix Permissions",
 		"Crontab Explanation",
 		"HTTP Status Codes",
+		"HTTP Client",
 		"JWT Decoder",
 		"SSL Certificate",
 		"Networking Utilities",
