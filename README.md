@@ -108,12 +108,19 @@ A powerful, multi-purpose calculator application with support for mathematical e
 - Matching parts are highlighted with `«»` markers
 - Captured groups are displayed in multi-line output
 
-### Unix Permissions
+### System Administration
+
+#### Unix Permissions
 - Chmod octal to symbolic: `chmod 755`, `chmod 644`, `chmod 4755`
 - Chmod symbolic to octal: `chmod rwxr-xr-x`, `chmod rwx r-x r-x`
 - Umask calculator: `umask 022`, `umask 077`
 - Special bits: setuid (`4xxx`), setgid (`2xxx`), sticky (`1xxx`)
 - Permission conversions: `755 to symbolic`, `rwxr-xr-x to octal`
+
+#### Crontab Explanation
+- Explain cron expressions: `cron */5 * * * *`, `cron 0 0 * * *`
+- Short aliases: `cron @daily`, `cron @hourly`, `cron @weekly`, `cron @monthly`, `cron @yearly`
+- Supports ranges, steps, and lists: `cron 30 2 * * 1-5`, `cron 0 9 * * 1,5`
 
 ### JWT Decoder
 - Decode JWT tokens: `jwt decode <token>` or `jwt <token>`
@@ -282,13 +289,24 @@ regex /(\w+)@(\w+)/ test "user@domain" = match: «user@domain»
 >   [1]: "user"
 >   [2]: "domain"
 
-# Unix Permissions
+# System Administration
+
+## Unix Permissions
 chmod 755 = rwxr-xr-x
 chmod 644 = rw-r--r--
 chmod rwxr-xr-x = 755
 chmod 4755 = rwsr-xr-x (setuid)
 chmod 1777 = rwxrwxrwt (sticky)
 umask 022 = files: 644 (rw-r--r--), directories: 755 (rwxr-xr-x)
+
+## Crontab Explanation
+cron */5 * * * * = Every 5 minutes
+cron 0 0 * * * = At 00:00
+cron 30 2 * * 1-5 = At 02:30, on Monday through Friday
+cron 0 9 * * 1,5 = At 09:00, on Monday, Friday
+cron @daily = At 00:00 (0 0 * * *)
+cron @hourly = At minute 0 of every hour (0 * * * *)
+cron 0 0 1 1 * = At 00:00, on day 1, in January
 
 # JWT Decoder
 jwt decode eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig =
