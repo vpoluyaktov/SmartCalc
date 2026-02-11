@@ -398,6 +398,57 @@ Ready-to-use packages for all major platforms are available on the [GitHub Relea
 - **macOS (Apple Silicon)**: `SmartCalc-darwin-arm64.app.zip`
 - **Linux**: `SmartCalc-linux-amd64`
 
+### First Launch Instructions
+
+#### macOS
+
+When you first open SmartCalc on macOS, you may see a warning: **"Apple cannot verify that this application is free from malware"** or **"SmartCalc cannot be opened because the developer cannot be verified"**.
+
+This is normal for applications distributed outside the Mac App Store. To open SmartCalc:
+
+1. **Download and extract** the `.zip` file
+2. **Move** `SmartCalc.app` to your Applications folder (optional but recommended)
+3. **Right-click** (or Control-click) on `SmartCalc.app`
+4. Select **"Open"** from the context menu
+5. Click **"Open"** in the security dialog that appears
+
+**Note**: You only need to do this once. After the first launch, you can open SmartCalc normally by double-clicking.
+
+**Alternative method** (if right-click doesn't work):
+1. Go to **System Settings** → **Privacy & Security**
+2. Scroll down to the **Security** section
+3. Click **"Open Anyway"** next to the SmartCalc message
+4. Click **"Open"** to confirm
+
+#### Windows
+
+When you first run SmartCalc on Windows, you may see a **Windows SmartScreen** warning: **"Windows protected your PC"**.
+
+This is normal for applications without an Extended Validation certificate. To run SmartCalc:
+
+1. **Download** the `.exe` file
+2. **Double-click** to run it
+3. If you see the SmartScreen warning, click **"More info"**
+4. Click **"Run anyway"**
+
+**Note**: You only need to do this once. Windows will remember your choice for future launches.
+
+**Why do these warnings appear?**
+
+SmartCalc is an open-source application distributed for free. Code signing certificates cost $100-600/year per platform, which is not feasible for a free project. The application is safe to use - you can verify this by:
+- Reviewing the [source code](https://github.com/vpoluyaktov/smartcalc) on GitHub
+- Checking that the download comes from the official GitHub Releases page
+- Building from source yourself (see instructions below)
+
+#### Linux
+
+No security warnings on Linux. Simply download and run:
+
+```bash
+chmod +x SmartCalc-linux-amd64
+./SmartCalc-linux-amd64
+```
+
 ### Build from Source
 
 #### Prerequisites
