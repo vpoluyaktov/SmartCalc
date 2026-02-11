@@ -2,11 +2,13 @@ package network
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -77,6 +79,7 @@ func EvalDNS(expr string) (string, error) {
 }
 
 // queryDNS sends a DNS query using DNS-over-HTTPS to bypass network interception
+// Tries all DoH servers in parallel and returns the first successful response
 func queryDNS(domain string, qtype uint16) (*dns.Msg, error) {
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(domain), qtype)
@@ -88,72 +91,151 @@ func queryDNS(domain string, qtype uint16) (*dns.Msg, error) {
 		return nil, fmt.Errorf("failed to pack DNS message: %w", err)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// Use context with timeout for all queries
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-	var lastErr error
+	// Channel to receive first successful result
+	type result struct {
+		msg *dns.Msg
+		err error
+	}
+	resultChan := make(chan result, len(dohServers))
+
+	// Query all servers in parallel
+	var wg sync.WaitGroup
 	for _, server := range dohServers {
-		req, err := http.NewRequest("POST", server, bytes.NewReader(dnsData))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		req.Header.Set("Content-Type", "application/dns-message")
-		req.Header.Set("Accept", "application/dns-message")
+		wg.Add(1)
+		go func(serverURL string) {
+			defer wg.Done()
 
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
+			req, err := http.NewRequest("POST", serverURL, bytes.NewReader(dnsData))
+			if err != nil {
+				resultChan <- result{nil, err}
+				return
+			}
+			req.Header.Set("Content-Type", "application/dns-message")
+			req.Header.Set("Accept", "application/dns-message")
+			req = req.WithContext(ctx)
 
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
+			client := &http.Client{Timeout: 3 * time.Second}
+			resp, err := client.Do(req)
+			if err != nil {
+				resultChan <- result{nil, err}
+				return
+			}
 
-		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("DoH server returned status %d", resp.StatusCode)
-			continue
-		}
+			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				resultChan <- result{nil, err}
+				return
+			}
 
-		r := new(dns.Msg)
-		if err := r.Unpack(body); err != nil {
-			lastErr = err
-			continue
-		}
+			if resp.StatusCode != http.StatusOK {
+				resultChan <- result{nil, fmt.Errorf("DoH server returned status %d", resp.StatusCode)}
+				return
+			}
 
-		if r.Rcode != dns.RcodeSuccess {
-			lastErr = fmt.Errorf("DNS query failed with rcode: %d", r.Rcode)
-			continue
-		}
+			r := new(dns.Msg)
+			if err := r.Unpack(body); err != nil {
+				resultChan <- result{nil, err}
+				return
+			}
 
-		return r, nil
+			if r.Rcode != dns.RcodeSuccess {
+				resultChan <- result{nil, fmt.Errorf("DNS query failed with rcode: %d", r.Rcode)}
+				return
+			}
+
+			resultChan <- result{r, nil}
+		}(server)
+	}
+
+	// Close channel when all goroutines complete
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Return first successful result
+	var lastErr error
+	for res := range resultChan {
+		if res.err == nil && res.msg != nil {
+			return res.msg, nil
+		}
+		lastErr = res.err
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("all DoH servers failed")
 	}
 	return nil, lastErr
 }
 
 // lookupDomain performs DNS lookups for a domain using public DNS servers
+// Queries all record types in parallel for better performance
 func lookupDomain(domain string) (string, error) {
 	var result strings.Builder
 
 	result.WriteString(fmt.Sprintf("> DNS Lookup: %s\n", domain))
 
-	// Follow CNAME chain and collect all records using public DNS
-	cnameChain := followCNAMEChain(domain)
+	// Query all record types in parallel
+	type recordResults struct {
+		cnameChain []cnameEntry
+		ipv4s      []string
+		ipv6s      []string
+		mxRecords  []mxRecord
+		nsRecords  []string
+		txtRecords []string
+	}
 
-	if len(cnameChain) > 1 {
+	results := &recordResults{}
+	var wg sync.WaitGroup
+
+	// CNAME chain resolution
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results.cnameChain = followCNAMEChain(domain)
+	}()
+
+	// MX records
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results.mxRecords = lookupMXPublicDNS(domain)
+	}()
+
+	// NS records
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results.nsRecords = lookupNSPublicDNS(domain)
+	}()
+
+	// TXT records
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results.txtRecords = lookupTXTPublicDNS(domain)
+	}()
+
+	// Wait for all queries to complete
+	wg.Wait()
+
+	// Display CNAME chain or direct A/AAAA records
+	if len(results.cnameChain) > 1 {
 		result.WriteString("> Resolution Chain:\n")
 		// Find max name length for alignment
 		maxLen := 0
-		for _, entry := range cnameChain {
+		for _, entry := range results.cnameChain {
 			if len(entry.name) > maxLen {
 				maxLen = len(entry.name)
 			}
 		}
-		for i, entry := range cnameChain {
-			if i < len(cnameChain)-1 {
+		for i, entry := range results.cnameChain {
+			if i < len(results.cnameChain)-1 {
 				// CNAME entry
 				result.WriteString(fmt.Sprintf(">   %-*s  CNAME  %s\n", maxLen, entry.name, entry.target))
 			} else {
@@ -165,46 +247,37 @@ func lookupDomain(domain string) (string, error) {
 				}
 			}
 		}
-	} else {
-		// Direct A records (no CNAME chain) - use public DNS
-		ipv4s, ipv6s := lookupIPsPublicDNS(domain)
-		if len(ipv4s) > 0 {
+	} else if len(results.cnameChain) == 1 {
+		// Direct A records (no CNAME chain)
+		entry := results.cnameChain[0]
+		if len(entry.ips) > 0 {
 			result.WriteString("> A Records:\n")
-			for _, ip := range ipv4s {
-				result.WriteString(fmt.Sprintf(">   %s\n", ip))
-			}
-		}
-		if len(ipv6s) > 0 {
-			result.WriteString("> AAAA Records:\n")
-			for _, ip := range ipv6s {
+			for _, ip := range entry.ips {
 				result.WriteString(fmt.Sprintf(">   %s\n", ip))
 			}
 		}
 	}
 
-	// MX records using public DNS
-	mxRecords := lookupMXPublicDNS(domain)
-	if len(mxRecords) > 0 {
+	// MX records
+	if len(results.mxRecords) > 0 {
 		result.WriteString("> MX Records:\n")
-		for _, mx := range mxRecords {
+		for _, mx := range results.mxRecords {
 			result.WriteString(fmt.Sprintf(">   %s (priority: %d)\n", mx.host, mx.pref))
 		}
 	}
 
-	// NS records using public DNS
-	nsRecords := lookupNSPublicDNS(domain)
-	if len(nsRecords) > 0 {
+	// NS records
+	if len(results.nsRecords) > 0 {
 		result.WriteString("> NS Records:\n")
-		for _, ns := range nsRecords {
+		for _, ns := range results.nsRecords {
 			result.WriteString(fmt.Sprintf(">   %s\n", ns))
 		}
 	}
 
-	// TXT records using public DNS
-	txtRecords := lookupTXTPublicDNS(domain)
-	if len(txtRecords) > 0 {
+	// TXT records
+	if len(results.txtRecords) > 0 {
 		result.WriteString("> TXT Records:\n")
-		for _, txt := range txtRecords {
+		for _, txt := range results.txtRecords {
 			// Truncate long TXT records
 			if len(txt) > 80 {
 				txt = txt[:77] + "..."
