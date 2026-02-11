@@ -82,11 +82,11 @@ func TestEvalNetToolsPing(t *testing.T) {
 	if err != nil {
 		t.Skipf("Skipping ping test (network required): %v", err)
 	}
-	
+
 	if !strings.Contains(result, "HTTP Ping to google.com:80") {
 		t.Errorf("Expected ping result to contain 'HTTP Ping to google.com:80', got: %s", result)
 	}
-	
+
 	if !strings.Contains(result, "Round trip times") {
 		t.Errorf("Expected ping result to contain timing info, got: %s", result)
 	}
@@ -98,13 +98,29 @@ func TestEvalNetToolsTrace(t *testing.T) {
 	if err != nil {
 		t.Skipf("Skipping trace test (network required): %v", err)
 	}
-	
-	if !strings.Contains(result, "HTTP Trace to google.com:80") {
-		t.Errorf("Expected trace result to contain 'HTTP Trace to google.com:80', got: %s", result)
+
+	if !strings.Contains(result, "Traceroute to google.com:80") {
+		t.Errorf("Expected trace result to contain 'Traceroute to google.com:80', got: %s", result)
 	}
-	
+
+	if !strings.Contains(result, "DNS Resolution") {
+		t.Errorf("Expected trace result to contain DNS Resolution, got: %s", result)
+	}
+}
+
+func TestEvalNetToolsNetstat(t *testing.T) {
+	// Test with a reliable host
+	result, err := EvalNetTools("netstat google.com 80")
+	if err != nil {
+		t.Skipf("Skipping netstat test (network required): %v", err)
+	}
+
+	if !strings.Contains(result, "HTTP Netstat to google.com:80") {
+		t.Errorf("Expected netstat result to contain 'HTTP Netstat to google.com:80', got: %s", result)
+	}
+
 	if !strings.Contains(result, "Timing breakdown") {
-		t.Errorf("Expected trace result to contain timing breakdown, got: %s", result)
+		t.Errorf("Expected netstat result to contain timing breakdown, got: %s", result)
 	}
 }
 

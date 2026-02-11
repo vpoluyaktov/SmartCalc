@@ -7,43 +7,54 @@ import (
 	"strings"
 )
 
-// IsNetToolsExpression checks if an expression is a ping or trace command
+// IsNetToolsExpression checks if an expression is a ping, trace, or netstat command
 func IsNetToolsExpression(expr string) bool {
 	expr = strings.TrimSpace(expr)
 	exprLower := strings.ToLower(expr)
-	
+
 	// Check for ping command
 	pingPattern := regexp.MustCompile(`^(?:ping|http\s+ping)\s+\S+`)
 	if pingPattern.MatchString(exprLower) {
 		return true
 	}
-	
+
 	// Check for trace command
 	tracePattern := regexp.MustCompile(`^(?:trace|traceroute|http\s+trace)\s+\S+`)
 	if tracePattern.MatchString(exprLower) {
 		return true
 	}
-	
+
+	// Check for netstat command
+	netstatPattern := regexp.MustCompile(`^(?:netstat|http\s+netstat)\s+\S+`)
+	if netstatPattern.MatchString(exprLower) {
+		return true
+	}
+
 	return false
 }
 
-// EvalNetTools evaluates ping or trace expressions
+// EvalNetTools evaluates ping, trace, or netstat expressions
 func EvalNetTools(expr string) (string, error) {
 	expr = strings.TrimSpace(expr)
 	exprLower := strings.ToLower(expr)
-	
+
 	// Try ping first
 	if strings.HasPrefix(exprLower, "ping ") || strings.HasPrefix(exprLower, "http ping ") {
 		return evalPing(expr)
 	}
-	
+
 	// Try trace
-	if strings.HasPrefix(exprLower, "trace ") || 
-	   strings.HasPrefix(exprLower, "traceroute ") || 
-	   strings.HasPrefix(exprLower, "http trace ") {
+	if strings.HasPrefix(exprLower, "trace ") ||
+		strings.HasPrefix(exprLower, "traceroute ") ||
+		strings.HasPrefix(exprLower, "http trace ") {
 		return evalTrace(expr)
 	}
-	
+
+	// Try netstat
+	if strings.HasPrefix(exprLower, "netstat ") || strings.HasPrefix(exprLower, "http netstat ") {
+		return evalNetstat(expr)
+	}
+
 	return "", fmt.Errorf("not a nettools expression")
 }
 
@@ -54,13 +65,17 @@ func parseHostPort(expr string) (string, int, error) {
 	// Remove command prefix
 	exprLower := strings.ToLower(expr)
 	var rest string
-	
-	if strings.HasPrefix(exprLower, "http ping ") {
+
+	if strings.HasPrefix(exprLower, "http netstat ") {
+		rest = strings.TrimSpace(expr[13:])
+	} else if strings.HasPrefix(exprLower, "http ping ") {
 		rest = strings.TrimSpace(expr[10:])
 	} else if strings.HasPrefix(exprLower, "http trace ") {
 		rest = strings.TrimSpace(expr[11:])
 	} else if strings.HasPrefix(exprLower, "traceroute ") {
 		rest = strings.TrimSpace(expr[11:])
+	} else if strings.HasPrefix(exprLower, "netstat ") {
+		rest = strings.TrimSpace(expr[8:])
 	} else if strings.HasPrefix(exprLower, "trace ") {
 		rest = strings.TrimSpace(expr[6:])
 	} else if strings.HasPrefix(exprLower, "ping ") {
@@ -68,16 +83,16 @@ func parseHostPort(expr string) (string, int, error) {
 	} else {
 		return "", 0, fmt.Errorf("invalid command")
 	}
-	
+
 	// Split by space to get host and optional port
 	parts := strings.Fields(rest)
 	if len(parts) == 0 {
 		return "", 0, fmt.Errorf("missing host")
 	}
-	
+
 	host := parts[0]
 	port := 443 // default port
-	
+
 	if len(parts) >= 2 {
 		// Try to parse port
 		p, err := strconv.Atoi(parts[1])
@@ -89,7 +104,7 @@ func parseHostPort(expr string) (string, int, error) {
 		}
 		port = p
 	}
-	
+
 	return host, port, nil
 }
 
@@ -98,12 +113,12 @@ func evalPing(expr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	result, err := HTTPPing(host, port)
 	if err != nil {
 		return "", err
 	}
-	
+
 	return result, nil
 }
 
@@ -112,11 +127,25 @@ func evalTrace(expr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	result, err := HTTPTrace(host, port)
 	if err != nil {
 		return "", err
 	}
-	
+
+	return result, nil
+}
+
+func evalNetstat(expr string) (string, error) {
+	host, port, err := parseHostPort(expr)
+	if err != nil {
+		return "", err
+	}
+
+	result, err := HTTPNetstat(host, port)
+	if err != nil {
+		return "", err
+	}
+
 	return result, nil
 }
