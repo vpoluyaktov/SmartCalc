@@ -17,12 +17,12 @@ func HTTPPing(host string, port int) (string, error) {
 		scheme = "http"
 	}
 	url := fmt.Sprintf("%s://%s:%d/", scheme, host, port)
-	
-	// Perform multiple pings (4 attempts like traditional ping)
-	const attempts = 4
+
+	// Perform multiple pings (10 attempts)
+	const attempts = 10
 	var results []time.Duration
 	var failed int
-	
+
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
@@ -38,17 +38,17 @@ func HTTPPing(host string, port int) (string, error) {
 			return http.ErrUseLastResponse
 		},
 	}
-	
+
 	for i := 0; i < attempts; i++ {
 		start := time.Now()
-		
+
 		req, err := http.NewRequest("HEAD", url, nil)
 		if err != nil {
 			failed++
 			continue
 		}
 		req.Header.Set("User-Agent", "SmartCalc/1.0")
-		
+
 		resp, err := client.Do(req)
 		if err != nil {
 			// If HTTPS fails on first attempt, try HTTP
@@ -72,25 +72,25 @@ func HTTPPing(host string, port int) (string, error) {
 			continue
 		}
 		defer resp.Body.Close()
-		
+
 		duration := time.Since(start)
 		results = append(results, duration)
-		
+
 		// Small delay between pings
 		if i < attempts-1 {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	
+
 	if len(results) == 0 {
 		return "", fmt.Errorf("all ping attempts failed")
 	}
-	
+
 	// Calculate statistics
 	var min, max, sum time.Duration
 	min = results[0]
 	max = results[0]
-	
+
 	for _, d := range results {
 		sum += d
 		if d < min {
@@ -100,10 +100,10 @@ func HTTPPing(host string, port int) (string, error) {
 			max = d
 		}
 	}
-	
+
 	avg := sum / time.Duration(len(results))
 	successRate := float64(len(results)) / float64(attempts) * 100
-	
+
 	// Format output
 	output := fmt.Sprintf("\n> HTTP Ping to %s:%d (%s)", host, port, scheme)
 	output += fmt.Sprintf("\n> Packets: Sent = %d, Received = %d, Lost = %d (%.0f%% loss)",
@@ -111,6 +111,6 @@ func HTTPPing(host string, port int) (string, error) {
 	output += fmt.Sprintf("\n> Round trip times:")
 	output += fmt.Sprintf("\n>   Minimum = %dms, Maximum = %dms, Average = %dms",
 		min.Milliseconds(), max.Milliseconds(), avg.Milliseconds())
-	
+
 	return output, nil
 }
