@@ -484,24 +484,28 @@ function initEditor() {
         });
     });
 
-    // Check for updates
-    CheckForUpdates().then(release => {
-        if (release) {
-            const updateNotification = document.getElementById('update-notification');
-            const updateLink = document.getElementById('update-link');
-            
-            updateNotification.classList.remove('hidden');
-            updateLink.textContent = `New version ${release.tag_name} available!`;
-            
-            updateLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                OpenURL(release.html_url);
-            });
-        }
-    }).catch(err => {
-        // Silently ignore update check errors (e.g., no network)
-        console.log('Update check failed:', err);
-    });
+    // Check for updates (on startup and every hour)
+    function checkForUpdates() {
+        CheckForUpdates().then(release => {
+            if (release) {
+                const updateNotification = document.getElementById('update-notification');
+                const updateLink = document.getElementById('update-link');
+                
+                updateNotification.classList.remove('hidden');
+                updateLink.textContent = `New version ${release.tag_name} available!`;
+                
+                updateLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    OpenURL(release.html_url);
+                });
+            }
+        }).catch(err => {
+            // Silently ignore update check errors (e.g., no network)
+            console.log('Update check failed:', err);
+        });
+    }
+    checkForUpdates();
+    setInterval(checkForUpdates, 60 * 60 * 1000); // Re-check every hour
 
     // Set up keyboard shortcuts
     document.addEventListener('keydown', handleKeyboard);
