@@ -567,6 +567,12 @@ func EvalLines(lines []string, activeLineNum int) []LineResult {
 				continue
 			}
 
+			// Show progress indicator while DNS lookup is in progress
+			if isActiveLine {
+				results[i].Output = expr + " = ⏳" + inlineComment
+				results[i].HasResult = true
+			}
+
 			dnsResult, err := network.EvalDNS(expr)
 			if err == nil {
 				results[i].Output = expr + " =\n" + dnsResult + inlineComment
