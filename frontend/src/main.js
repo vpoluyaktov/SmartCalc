@@ -433,9 +433,10 @@ async function evaluateAndUpdate(lineNumber) {
             }
         }
         
-        // Now evaluate the line using the CURRENT editor text (which may have the progress indicator)
+        // Now evaluate the line - strip any progress indicators first
         const currentText = editor.state.doc.toString();
-        const results = await EvaluateLines(currentText, lineNumber);
+        const textToEvaluate = currentText.replace(/ ⏳/g, '');
+        const results = await EvaluateLines(textToEvaluate, lineNumber);
         
         // Build new content from results
         const newLines = results.map(r => r.output);
@@ -754,9 +755,10 @@ async function evaluateLineAndDependents(lineNumber) {
             }
         }
         
-        // Evaluate using the CURRENT editor text (which may have the progress indicator)
+        // Evaluate - strip any progress indicators first
         const currentText = editor.state.doc.toString();
-        const results = await EvaluateLines(currentText, lineNumber);
+        const textToEvaluate = currentText.replace(/ ⏳/g, '');
+        const results = await EvaluateLines(textToEvaluate, lineNumber);
         
         // Build new content from results
         const newLines = results.map(r => r.output);
