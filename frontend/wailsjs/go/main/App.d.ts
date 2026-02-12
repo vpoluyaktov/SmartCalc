@@ -17,6 +17,8 @@ export function Evaluate(arg1:string,arg2:number):Promise<Array<main.EvalResult>
 
 export function EvaluateLines(arg1:string,arg2:number):Promise<Array<main.EvalResult>>;
 
+export function EvaluateParallel(arg1:string):Promise<Array<main.EvalResult>>;
+
 export function FindDependentLines(arg1:string,arg2:number):Promise<Array<number>>;
 
 export function GetGitHubRepoURL():Promise<string>;

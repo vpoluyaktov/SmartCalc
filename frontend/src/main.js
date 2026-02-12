@@ -4,7 +4,7 @@ import { EditorState, RangeSetBuilder } from '@codemirror/state';
 import { keymap, Decoration, ViewPlugin } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine } from '@codemirror/view';
-import { Evaluate, GetVersion, OpenFileDialog, SaveFileDialog, ReadFile, WriteFile, AddRecentFile, GetLastFile, AutoSave, AdjustReferences, CopyWithResolvedRefs, SetUnsavedState, Quit, StripLineResult, HasLineResult, EvaluateLines, StripAllResults, StripAndEvalReferencingLines, GetGitHubRepoURL, CheckForUpdates, OpenURL } from '../wailsjs/go/main/App';
+import { Evaluate, EvaluateParallel, GetVersion, OpenFileDialog, SaveFileDialog, ReadFile, WriteFile, AddRecentFile, GetLastFile, AutoSave, AdjustReferences, CopyWithResolvedRefs, SetUnsavedState, Quit, StripLineResult, HasLineResult, EvaluateLines, StripAllResults, StripAndEvalReferencingLines, GetGitHubRepoURL, CheckForUpdates, OpenURL } from '../wailsjs/go/main/App';
 import { EventsOn, ClipboardGetText, ClipboardSetText } from '../wailsjs/runtime/runtime';
 
 let editor;
@@ -402,6 +402,38 @@ async function handleEnterKeyAsync(view, lineNumber, alreadyAddedEquals) {
 async function evaluateAndUpdate(lineNumber) {
     const text = editor.state.doc.toString();
     try {
+        // First, add progress indicator to the line being evaluated
+        const lines = text.split('\n');
+        const lineIdx = lineNumber - 1; // Convert to 0-based
+        if (lineIdx >= 0 && lineIdx < lines.length) {
+            const line = lines[lineIdx];
+            const trimmed = line.trim();
+            // Add progress indicator if line ends with = (and it's not a comparison operator)
+            if (trimmed.endsWith('=') && !trimmed.endsWith('==') && !trimmed.endsWith('!=') && 
+                !trimmed.endsWith('<=') && !trimmed.endsWith('>=')) {
+                lines[lineIdx] = line + ' ⏳';
+                const progressText = lines.join('\n');
+                
+                // Show progress indicator immediately
+                const scrollTop = editor.scrollDOM.scrollTop;
+                const scrollLeft = editor.scrollDOM.scrollLeft;
+                
+                editor.dispatch({
+                    changes: { from: 0, to: editor.state.doc.length, insert: progressText },
+                });
+                
+                // Restore scroll and force a render
+                requestAnimationFrame(() => {
+                    editor.scrollDOM.scrollTop = scrollTop;
+                    editor.scrollDOM.scrollLeft = scrollLeft;
+                });
+                
+                // Small delay to ensure progress indicator is visible
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+        }
+        
+        // Now evaluate the line
         const results = await EvaluateLines(text, lineNumber);
         
         // Build new content from results
@@ -689,6 +721,39 @@ async function stripCurrentLineResult() {
 async function evaluateLineAndDependents(lineNumber) {
     const text = editor.state.doc.toString();
     try {
+        // Add progress indicator to the line being evaluated
+        const lines = text.split('\n');
+        const lineIdx = lineNumber - 1; // Convert to 0-based
+        if (lineIdx >= 0 && lineIdx < lines.length) {
+            const line = lines[lineIdx];
+            const trimmed = line.trim();
+            // Add progress indicator if line ends with = (and it's not a comparison operator)
+            if (trimmed.endsWith('=') && !trimmed.endsWith('==') && !trimmed.endsWith('!=') && 
+                !trimmed.endsWith('<=') && !trimmed.endsWith('>=')) {
+                lines[lineIdx] = line + ' ⏳';
+                const progressText = lines.join('\n');
+                
+                // Show progress indicator immediately
+                const scrollTop = editor.scrollDOM.scrollTop;
+                const scrollLeft = editor.scrollDOM.scrollLeft;
+                
+                isUpdatingEditor = true;
+                editor.dispatch({
+                    changes: { from: 0, to: editor.state.doc.length, insert: progressText },
+                });
+                isUpdatingEditor = false;
+                
+                // Restore scroll
+                requestAnimationFrame(() => {
+                    editor.scrollDOM.scrollTop = scrollTop;
+                    editor.scrollDOM.scrollLeft = scrollLeft;
+                });
+                
+                // Small delay to ensure progress indicator is visible
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+        }
+        
         const results = await EvaluateLines(text, lineNumber);
         
         // Build new content from results
@@ -857,7 +922,7 @@ async function evaluateContent() {
     }
 }
 
-// Recalculate all expressions - strips all results and re-evaluates everything
+// Recalculate all expressions - strips all results and re-evaluates everything in parallel
 async function recalculateAll() {
     isUpdatingEditor = true;
     try {
@@ -872,13 +937,29 @@ async function recalculateAll() {
         // Strip all results and output lines
         const strippedText = await StripAllResults(text);
         
-        // Replace editor content with stripped text
+        // Add progress indicators (= ⏳) to all expression lines
+        const strippedLines = strippedText.split('\n');
+        const withProgress = strippedLines.map(line => {
+            const trimmed = line.trim();
+            // Add progress indicator to lines with = but no result yet
+            if (trimmed.endsWith('=') && !trimmed.endsWith('==') && !trimmed.endsWith('!=') && 
+                !trimmed.endsWith('<=') && !trimmed.endsWith('>=')) {
+                return line + ' ⏳';
+            }
+            return line;
+        });
+        const progressText = withProgress.join('\n');
+        
+        // Show progress indicators immediately
         editor.dispatch({
-            changes: { from: 0, to: editor.state.doc.length, insert: strippedText },
+            changes: { from: 0, to: editor.state.doc.length, insert: progressText },
         });
         
-        // Now evaluate all expressions
-        const results = await Evaluate(strippedText, 0);
+        // Force a render to show progress indicators
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        
+        // Now evaluate all expressions in parallel
+        const results = await EvaluateParallel(strippedText);
         const newLines = results.map(r => r.output);
         const newText = newLines.join('\n');
         

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"smartcalc/internal/cert"
 	"smartcalc/internal/color"
@@ -230,6 +231,41 @@ func cleanOutputLines(lines []string) []string {
 		result = append(result, line)
 	}
 	return result
+}
+
+// EvalLinesParallel evaluates all lines in parallel for better UI responsiveness.
+// Each line is evaluated independently in its own goroutine.
+// This is used for Ctrl+R recalculation where we want to show results as they complete.
+func EvalLinesParallel(lines []string) []LineResult {
+	// First pass: remove stale output lines
+	cleanedLines := cleanOutputLines(lines)
+
+	results := make([]LineResult, len(cleanedLines))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// Evaluate each line in parallel
+	for i := range cleanedLines {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			// Evaluate this single line
+			lineResults := EvalLines([]string{cleanedLines[idx]}, 0)
+
+			// Store result
+			mu.Lock()
+			if len(lineResults) > 0 {
+				results[idx] = lineResults[0]
+			} else {
+				results[idx] = LineResult{Output: cleanedLines[idx]}
+			}
+			mu.Unlock()
+		}(i)
+	}
+
+	wg.Wait()
+	return results
 }
 
 // EvalLines evaluates all lines and returns the processed output lines.
