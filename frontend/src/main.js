@@ -442,22 +442,25 @@ async function evaluateAndUpdate(lineNumber) {
         const newLines = results.map(r => r.output);
         const newText = newLines.join('\n');
         
-        // Always update to clear any progress indicators
-        const scrollTop = editor.scrollDOM.scrollTop;
-        const scrollLeft = editor.scrollDOM.scrollLeft;
-        
-        editor.dispatch({
-            changes: { from: 0, to: editor.state.doc.length, insert: newText },
-        });
-        
-        // Restore scroll
-        requestAnimationFrame(() => {
-            editor.scrollDOM.scrollTop = scrollTop;
-            editor.scrollDOM.scrollLeft = scrollLeft;
-        });
-        
-        previousText = newText;
-        previousLineCount = newText.split('\n').length;
+        // Only update if text changed (or if we need to clear progress indicator)
+        const hasProgressIndicator = currentText.includes(' ⏳');
+        if (newText !== textToEvaluate || hasProgressIndicator) {
+            const scrollTop = editor.scrollDOM.scrollTop;
+            const scrollLeft = editor.scrollDOM.scrollLeft;
+            
+            editor.dispatch({
+                changes: { from: 0, to: editor.state.doc.length, insert: newText },
+            });
+            
+            // Restore scroll
+            requestAnimationFrame(() => {
+                editor.scrollDOM.scrollTop = scrollTop;
+                editor.scrollDOM.scrollLeft = scrollLeft;
+            });
+            
+            previousText = newText;
+            previousLineCount = newText.split('\n').length;
+        }
     } catch (err) {
         console.error('Evaluation error:', err);
     }
@@ -764,40 +767,43 @@ async function evaluateLineAndDependents(lineNumber) {
         const newLines = results.map(r => r.output);
         const newText = newLines.join('\n');
         
-        // Always update to clear any progress indicators
-        const scrollTop = editor.scrollDOM.scrollTop;
-        const scrollLeft = editor.scrollDOM.scrollLeft;
-        const cursorPos = editor.state.selection.main.head;
-        const cursorLine = editor.state.doc.lineAt(cursorPos);
-        const currentLineNumber = cursorLine.number;
-        const columnOffset = cursorPos - cursorLine.from;
-        
-        isUpdatingEditor = true;
-        try {
-            editor.dispatch({
-                changes: { from: 0, to: editor.state.doc.length, insert: newText },
-            });
+        // Only update if text changed (or if we need to clear progress indicator)
+        const hasProgressIndicator = currentText.includes(' ⏳');
+        if (newText !== textToEvaluate || hasProgressIndicator) {
+            const scrollTop = editor.scrollDOM.scrollTop;
+            const scrollLeft = editor.scrollDOM.scrollLeft;
+            const cursorPos = editor.state.selection.main.head;
+            const cursorLine = editor.state.doc.lineAt(cursorPos);
+            const currentLineNumber = cursorLine.number;
+            const columnOffset = cursorPos - cursorLine.from;
             
-            // Restore cursor position
-            const newDoc = editor.state.doc;
-            if (currentLineNumber <= newDoc.lines) {
-                const newLine = newDoc.line(currentLineNumber);
-                const newPos = newLine.from + Math.min(columnOffset, newLine.length);
+            isUpdatingEditor = true;
+            try {
                 editor.dispatch({
-                    selection: { anchor: newPos },
+                    changes: { from: 0, to: editor.state.doc.length, insert: newText },
                 });
+                
+                // Restore cursor position
+                const newDoc = editor.state.doc;
+                if (currentLineNumber <= newDoc.lines) {
+                    const newLine = newDoc.line(currentLineNumber);
+                    const newPos = newLine.from + Math.min(columnOffset, newLine.length);
+                    editor.dispatch({
+                        selection: { anchor: newPos },
+                    });
+                }
+                
+                // Restore scroll
+                requestAnimationFrame(() => {
+                    editor.scrollDOM.scrollTop = scrollTop;
+                    editor.scrollDOM.scrollLeft = scrollLeft;
+                });
+                
+                previousText = newText;
+                previousLineCount = newText.split('\n').length;
+            } finally {
+                isUpdatingEditor = false;
             }
-            
-            // Restore scroll
-            requestAnimationFrame(() => {
-                editor.scrollDOM.scrollTop = scrollTop;
-                editor.scrollDOM.scrollLeft = scrollLeft;
-            });
-            
-            previousText = newText;
-            previousLineCount = newText.split('\n').length;
-        } finally {
-            isUpdatingEditor = false;
         }
     } catch (err) {
         console.error('Evaluation error:', err);
