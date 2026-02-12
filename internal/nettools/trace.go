@@ -41,6 +41,17 @@ func HTTPTrace(host string, port int) (string, error) {
 	targetIP := ips[0]
 	isIPv6 := targetIP.To4() == nil
 
+	// Test if we can create ICMP socket (check permissions)
+	network := "ip4:icmp"
+	if isIPv6 {
+		network = "ip6:ipv6-icmp"
+	}
+	testConn, err := icmp.ListenPacket(network, "")
+	if err != nil {
+		return "", fmt.Errorf("cannot create ICMP socket (requires root/CAP_NET_RAW): %v\nRun with: sudo smartcalc or sudo setcap cap_net_raw+ep ./smartcalc", err)
+	}
+	testConn.Close()
+
 	var output strings.Builder
 	output.WriteString(fmt.Sprintf("\n> Traceroute to %s (%s), 30 hops max", host, targetIP.String()))
 
