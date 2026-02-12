@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"smartcalc/internal/cert"
 	"smartcalc/internal/color"
@@ -19,6 +20,7 @@ import (
 	"smartcalc/internal/httpstatus"
 	"smartcalc/internal/jwt"
 	"smartcalc/internal/manhour"
+	"smartcalc/internal/nettools"
 	"smartcalc/internal/network"
 	"smartcalc/internal/percentage"
 	"smartcalc/internal/permissions"
@@ -229,6 +231,41 @@ func cleanOutputLines(lines []string) []string {
 		result = append(result, line)
 	}
 	return result
+}
+
+// EvalLinesParallel evaluates all lines in parallel for better UI responsiveness.
+// Each line is evaluated independently in its own goroutine.
+// This is used for Ctrl+R recalculation where we want to show results as they complete.
+func EvalLinesParallel(lines []string) []LineResult {
+	// First pass: remove stale output lines
+	cleanedLines := cleanOutputLines(lines)
+
+	results := make([]LineResult, len(cleanedLines))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// Evaluate each line in parallel
+	for i := range cleanedLines {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			// Evaluate this single line
+			lineResults := EvalLines([]string{cleanedLines[idx]}, 0)
+
+			// Store result
+			mu.Lock()
+			if len(lineResults) > 0 {
+				results[idx] = lineResults[0]
+			} else {
+				results[idx] = LineResult{Output: cleanedLines[idx]}
+			}
+			mu.Unlock()
+		}(i)
+	}
+
+	wg.Wait()
+	return results
 }
 
 // EvalLines evaluates all lines and returns the processed output lines.
@@ -642,6 +679,39 @@ func EvalLines(lines []string, activeLineNum int) []LineResult {
 			httpResult, err := httpclient.EvalHTTPClient(expr)
 			if err == nil {
 				results[i].Output = expr + " =\n" + httpResult + inlineComment
+				results[i].HasResult = true
+				continue
+			} else {
+				results[i].Output = expr + " = ERR: " + err.Error() + inlineComment
+				results[i].HasResult = true
+				continue
+			}
+		}
+
+		// Try nettools (ping/trace)
+		// Note: Don't use maybeFormat for nettools expressions
+		// Skip re-evaluation if line already has a result and is not the active line (expensive network operation)
+		if nettools.IsNetToolsExpression(expr) {
+			isActiveLine := activeLineNum > 0 && i+1 == activeLineNum
+
+			// Check if line already has an inline result (like "ERR: ..." after =)
+			existingResult := strings.TrimSpace(workingLine[eq+1:])
+			if existingResult != "" && !isActiveLine {
+				results[i].Output = line
+				results[i].HasResult = true
+				continue
+			}
+
+			// Check if line had multi-line output
+			if outputLines, ok := hasMultiLineOutput[i]; ok && !isActiveLine {
+				results[i].Output = line + "\n" + strings.Join(outputLines, "\n")
+				results[i].HasResult = true
+				continue
+			}
+
+			nettoolsResult, err := nettools.EvalNetTools(expr)
+			if err == nil {
+				results[i].Output = expr + " =" + nettoolsResult + inlineComment
 				results[i].HasResult = true
 				continue
 			} else {

@@ -208,6 +208,23 @@ func (a *App) Evaluate(text string, activeLineNum int) []EvalResult {
 	return evalResults
 }
 
+// EvaluateParallel evaluates all lines in parallel and returns results as they complete
+// This is used for Ctrl+R to make the UI more responsive
+func (a *App) EvaluateParallel(text string) []EvalResult {
+	lines := strings.Split(text, "\n")
+	results := calc.EvalLinesParallel(lines)
+
+	evalResults := make([]EvalResult, len(results))
+	for i, r := range results {
+		evalResults[i] = EvalResult{
+			LineNum: i + 1,
+			Input:   lines[i],
+			Output:  r.Output,
+		}
+	}
+	return evalResults
+}
+
 // GetVersion returns the app version
 func (a *App) GetVersion() string {
 	return version

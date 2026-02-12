@@ -30,6 +30,10 @@ export function EvaluateLines(arg1, arg2) {
   return window['go']['main']['App']['EvaluateLines'](arg1, arg2);
 }
 
+export function EvaluateParallel(arg1) {
+  return window['go']['main']['App']['EvaluateParallel'](arg1);
+}
+
 export function FindDependentLines(arg1, arg2) {
   return window['go']['main']['App']['FindDependentLines'](arg1, arg2);
 }
