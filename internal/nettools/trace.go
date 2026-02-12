@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 // HopInfo represents information about a single hop
@@ -188,33 +190,34 @@ func probeSingleUDP(targetIP string, ttl int, timeout time.Duration, isIPv6 bool
 	// Small delay to ensure ICMP listener is ready
 	time.Sleep(10 * time.Millisecond)
 
-	// Create UDP socket with TTL set via Dialer Control function
-	dialer := &net.Dialer{
-		Timeout: timeout,
-		Control: func(network, address string, c syscall.RawConn) error {
-			var setErr error
-			err := c.Control(func(fd uintptr) {
-				if isIPv6 {
-					setErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_UNICAST_HOPS, ttl)
-				} else {
-					setErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TTL, ttl)
-				}
-			})
-			if err != nil {
-				return err
-			}
-			return setErr
-		},
-	}
-
-	// Dial and send UDP packet with TTL set
-	conn, err := dialer.Dial(network, fmt.Sprintf("%s:%d", targetIP, dstPort))
+	// Create UDP packet connection and set TTL using ipv4/ipv6 package
+	udpConn, err := net.ListenPacket(network, "")
 	if err != nil {
 		return "", false
 	}
-	defer conn.Close()
+	defer udpConn.Close()
 
-	_, err = conn.Write([]byte("SmartCalc traceroute probe"))
+	// Set TTL using the ipv4/ipv6 package methods
+	if isIPv6 {
+		p := ipv6.NewPacketConn(udpConn)
+		if err := p.SetHopLimit(ttl); err != nil {
+			return "", false
+		}
+	} else {
+		p := ipv4.NewPacketConn(udpConn)
+		if err := p.SetTTL(ttl); err != nil {
+			return "", false
+		}
+	}
+
+	// Resolve destination address
+	dstAddr, err := net.ResolveUDPAddr(network, fmt.Sprintf("%s:%d", targetIP, dstPort))
+	if err != nil {
+		return "", false
+	}
+
+	// Send UDP packet
+	_, err = udpConn.WriteTo([]byte("SmartCalc traceroute probe"), dstAddr)
 	if err != nil {
 		return "", false
 	}
