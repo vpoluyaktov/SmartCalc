@@ -169,8 +169,8 @@ func probeSingleUDP(targetIP string, ttl int, timeout time.Duration, isIPv6 bool
 		return "", false
 	}
 
-	// Set read timeout
-	tv := syscall.Timeval{Sec: int64(timeout.Seconds()), Usec: int64(timeout.Nanoseconds()/1000) % 1000000}
+	// Set receive timeout using platform-specific function
+	tv := createTimeval(timeout)
 	if err := syscall.SetsockoptTimeval(fd, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv); err != nil {
 		return "", false
 	}
