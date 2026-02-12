@@ -195,6 +195,9 @@ func GetSnippetCategories() []SnippetCategory {
 			Snippets: []Snippet{
 				{"DNS Lookup", "# DNS lookup (aliases: dig, nslookup, dns, lookup, resolve)\ndig google.com =\n\n"},
 				{"WHOIS Lookup", "# Domain registration info\nwhois google.com =\n\n"},
+				{"Ping (HTTP)", "# HTTP ping - check connectivity and response time\nping google.com =\nping github.com 443 =\n\n"},
+				{"Traceroute (UDP)", "# UDP traceroute - show network path to destination\ntrace google.com =\ntrace 8.8.8.8 =\n\n"},
+				{"Netstat (HTTP)", "# HTTP connection timing breakdown\nnetstat google.com =\nnetstat github.com 443 =\n\n"},
 				{"IP Geolocation", "# IP geolocation (aliases: geoip, ip location, ip lookup, locate ip, where is)\ngeoip 8.8.8.8 =\n\nip lookup 1.1.1.1 =\n\n"},
 				{"My IP Address", "# Get your public IP address\nwhat is my ip =\nmy ip =\n\n"},
 			},
