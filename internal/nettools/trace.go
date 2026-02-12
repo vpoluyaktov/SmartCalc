@@ -146,79 +146,86 @@ func probeSingleUDP(targetIP string, ttl int, timeout time.Duration, isIPv6 bool
 		icmpProto = 58
 	}
 
-	// Create ICMP listener to receive Time Exceeded messages
+	// Create ICMP listener FIRST to receive Time Exceeded messages
 	icmpConn, err := icmp.ListenPacket(icmpNetwork, "")
 	if err != nil {
 		// Without ICMP listener, we can't detect intermediate hops
-		// But we can still try to reach the destination
 		return tryDirectUDP(targetIP, dstPort, ttl, timeout, network)
 	}
 	defer icmpConn.Close()
 
-	// Set read deadline on ICMP listener
-	icmpConn.SetReadDeadline(time.Now().Add(timeout))
+	// Start listening in background before sending UDP packet
+	type icmpResult struct {
+		ip  string
+		err error
+	}
+	resultChan := make(chan icmpResult, 1)
 
-	// Create UDP connection
-	udpAddr, err := net.ResolveUDPAddr(network, fmt.Sprintf("%s:%d", targetIP, dstPort))
+	go func() {
+		reply := make([]byte, 1500)
+		icmpConn.SetReadDeadline(time.Now().Add(timeout))
+		n, peer, err := icmpConn.ReadFrom(reply)
+		if err != nil {
+			resultChan <- icmpResult{err: err}
+			return
+		}
+
+		// Parse ICMP message
+		_, err = icmp.ParseMessage(icmpProto, reply[:n])
+		if err != nil {
+			resultChan <- icmpResult{err: err}
+			return
+		}
+
+		// Extract hop IP from ICMP response
+		if peerIP, ok := peer.(*net.IPAddr); ok {
+			resultChan <- icmpResult{ip: peerIP.IP.String()}
+		} else {
+			resultChan <- icmpResult{err: fmt.Errorf("invalid peer type")}
+		}
+	}()
+
+	// Small delay to ensure ICMP listener is ready
+	time.Sleep(10 * time.Millisecond)
+
+	// Create UDP socket with TTL set via Dialer Control function
+	dialer := &net.Dialer{
+		Timeout: timeout,
+		Control: func(network, address string, c syscall.RawConn) error {
+			var setErr error
+			err := c.Control(func(fd uintptr) {
+				if isIPv6 {
+					setErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_UNICAST_HOPS, ttl)
+				} else {
+					setErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TTL, ttl)
+				}
+			})
+			if err != nil {
+				return err
+			}
+			return setErr
+		},
+	}
+
+	// Dial and send UDP packet with TTL set
+	conn, err := dialer.Dial(network, fmt.Sprintf("%s:%d", targetIP, dstPort))
 	if err != nil {
 		return "", false
 	}
+	defer conn.Close()
 
-	udpConn, err := net.DialUDP(network, nil, udpAddr)
-	if err != nil {
-		return "", false
-	}
-	defer udpConn.Close()
-
-	// Set TTL on UDP socket
-	if isIPv6 {
-		if err := udpConn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-			return "", false
-		}
-		rawConn, err := udpConn.SyscallConn()
-		if err == nil {
-			rawConn.Control(func(fd uintptr) {
-				syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_UNICAST_HOPS, ttl)
-			})
-		}
-	} else {
-		if err := udpConn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-			return "", false
-		}
-		rawConn, err := udpConn.SyscallConn()
-		if err == nil {
-			rawConn.Control(func(fd uintptr) {
-				syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TTL, ttl)
-			})
-		}
-	}
-
-	// Send UDP packet
-	_, err = udpConn.Write([]byte("SmartCalc traceroute probe"))
+	_, err = conn.Write([]byte("SmartCalc traceroute probe"))
 	if err != nil {
 		return "", false
 	}
 
 	// Wait for ICMP response
-	reply := make([]byte, 1500)
-	n, peer, err := icmpConn.ReadFrom(reply)
-	if err != nil {
-		// Timeout - no response
+	result := <-resultChan
+	if result.err != nil {
 		return "", false
 	}
 
-	// Parse ICMP message to verify it's valid
-	_, err = icmp.ParseMessage(icmpProto, reply[:n])
-	if err != nil {
-		return "", false
-	}
-
-	// Extract hop IP from ICMP response
-	if peerIP, ok := peer.(*net.IPAddr); ok {
-		return peerIP.IP.String(), true
-	}
-
-	return "", false
+	return result.ip, true
 }
 
 // tryDirectUDP attempts a direct UDP connection when ICMP listener is not available
