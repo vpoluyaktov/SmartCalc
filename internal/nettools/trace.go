@@ -7,10 +7,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
-	"golang.org/x/net/ipv6"
 )
 
 // HopInfo represents information about a single hop
@@ -135,100 +131,100 @@ func probeHopUDP(targetIP string, ttl, probes int, timeout time.Duration, isIPv6
 }
 
 // probeSingleUDP performs a single UDP probe with specified TTL
+// Uses IP_RECVERR and recvmsg with MSG_ERRQUEUE to receive ICMP errors without privileges
 func probeSingleUDP(targetIP string, ttl int, timeout time.Duration, isIPv6 bool, seq int) (string, bool) {
 	// Use high port numbers like standard traceroute (33434 + seq)
 	dstPort := 33434 + seq
 
-	network := "udp4"
-	icmpNetwork := "ip4:icmp"
-	icmpProto := 1
-	if isIPv6 {
-		network = "udp6"
-		icmpNetwork = "ip6:ipv6-icmp"
-		icmpProto = 58
-	}
-
-	// Create ICMP listener FIRST to receive Time Exceeded messages
-	icmpConn, err := icmp.ListenPacket(icmpNetwork, "")
-	if err != nil {
-		// Without ICMP listener, we can't detect intermediate hops
-		return tryDirectUDP(targetIP, dstPort, ttl, timeout, network)
-	}
-	defer icmpConn.Close()
-
-	// Start listening in background before sending UDP packet
-	type icmpResult struct {
-		ip  string
-		err error
-	}
-	resultChan := make(chan icmpResult, 1)
-
-	go func() {
-		reply := make([]byte, 1500)
-		icmpConn.SetReadDeadline(time.Now().Add(timeout))
-		n, peer, err := icmpConn.ReadFrom(reply)
-		if err != nil {
-			resultChan <- icmpResult{err: err}
-			return
-		}
-
-		// Parse ICMP message
-		_, err = icmp.ParseMessage(icmpProto, reply[:n])
-		if err != nil {
-			resultChan <- icmpResult{err: err}
-			return
-		}
-
-		// Extract hop IP from ICMP response
-		if peerIP, ok := peer.(*net.IPAddr); ok {
-			resultChan <- icmpResult{ip: peerIP.IP.String()}
-		} else {
-			resultChan <- icmpResult{err: fmt.Errorf("invalid peer type")}
-		}
-	}()
-
-	// Small delay to ensure ICMP listener is ready
-	time.Sleep(10 * time.Millisecond)
-
-	// Create UDP packet connection and set TTL using ipv4/ipv6 package
-	udpConn, err := net.ListenPacket(network, "")
+	// Create UDP socket
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
 	if err != nil {
 		return "", false
 	}
-	defer udpConn.Close()
+	defer syscall.Close(fd)
 
-	// Set TTL using the ipv4/ipv6 package methods
-	if isIPv6 {
-		p := ipv6.NewPacketConn(udpConn)
-		if err := p.SetHopLimit(ttl); err != nil {
-			return "", false
-		}
-	} else {
-		p := ipv4.NewPacketConn(udpConn)
-		if err := p.SetTTL(ttl); err != nil {
-			return "", false
-		}
-	}
-
-	// Resolve destination address
-	dstAddr, err := net.ResolveUDPAddr(network, fmt.Sprintf("%s:%d", targetIP, dstPort))
-	if err != nil {
+	// Set socket options: IP_TTL and IP_RECVERR
+	if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_TTL, ttl); err != nil {
 		return "", false
 	}
+
+	// IP_RECVERR = 11 (Linux constant for receiving ICMP errors)
+	const IP_RECVERR = 11
+	if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, IP_RECVERR, 1); err != nil {
+		return "", false
+	}
+
+	// Resolve and prepare destination address
+	dstAddr := &syscall.SockaddrInet4{Port: dstPort}
+	ip := net.ParseIP(targetIP)
+	if ip == nil {
+		return "", false
+	}
+	copy(dstAddr.Addr[:], ip.To4())
 
 	// Send UDP packet
-	_, err = udpConn.WriteTo([]byte("SmartCalc traceroute probe"), dstAddr)
+	data := []byte("SmartCalc traceroute probe")
+	err = syscall.Sendto(fd, data, 0, dstAddr)
 	if err != nil {
 		return "", false
 	}
 
-	// Wait for ICMP response
-	result := <-resultChan
-	if result.err != nil {
+	// Set read timeout
+	tv := syscall.Timeval{Sec: int64(timeout.Seconds()), Usec: int64(timeout.Nanoseconds()/1000) % 1000000}
+	if err := syscall.SetsockoptTimeval(fd, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv); err != nil {
 		return "", false
 	}
 
-	return result.ip, true
+	// Receive with MSG_ERRQUEUE to get ICMP errors
+	const MSG_ERRQUEUE = 0x2000
+	buf := make([]byte, 1500)
+	control := make([]byte, 1024)
+
+	_, controllen, _, from, err := syscall.Recvmsg(fd, buf, control, MSG_ERRQUEUE)
+
+	if err != nil {
+		// No error in queue yet, wait a bit and try again
+		time.Sleep(100 * time.Millisecond)
+		_, controllen, _, from, err = syscall.Recvmsg(fd, buf, control, MSG_ERRQUEUE)
+
+		if err != nil {
+			// Try normal receive to see if we reached destination
+			n2, _, err2 := syscall.Recvfrom(fd, buf, 0)
+			if err2 == nil && n2 > 0 {
+				// Got response - reached destination
+				return targetIP, true
+			}
+			return "", false
+		}
+	}
+
+	// Parse control messages to extract hop IP from ICMP error
+	if controllen > 0 {
+		msgs, err := syscall.ParseSocketControlMessage(control[:controllen])
+		if err == nil {
+			for _, m := range msgs {
+				// IP_RECVERR control message
+				if m.Header.Level == syscall.IPPROTO_IP && m.Header.Type == IP_RECVERR {
+					// sock_extended_err structure has offender sockaddr after the error struct
+					// The structure is: ee_errno(4), ee_origin(1), ee_type(1), ee_code(1), ee_pad(1),
+					// ee_info(4), ee_data(4) = 16 bytes, then sockaddr_in (16 bytes for IPv4)
+					if len(m.Data) >= 32 {
+						// Offender address starts at byte 16, IP is at bytes 20-23
+						hopIP := net.IPv4(m.Data[20], m.Data[21], m.Data[22], m.Data[23])
+						return hopIP.String(), true
+					}
+				}
+			}
+		}
+	}
+	// Check if from address contains hop info
+	if from != nil {
+		if sa, ok := from.(*syscall.SockaddrInet4); ok {
+			return net.IPv4(sa.Addr[0], sa.Addr[1], sa.Addr[2], sa.Addr[3]).String(), true
+		}
+	}
+
+	return "", false
 }
 
 // tryDirectUDP attempts a direct UDP connection when ICMP listener is not available
