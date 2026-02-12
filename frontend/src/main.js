@@ -433,30 +433,30 @@ async function evaluateAndUpdate(lineNumber) {
             }
         }
         
-        // Now evaluate the line
-        const results = await EvaluateLines(text, lineNumber);
+        // Now evaluate the line using the CURRENT editor text (which may have the progress indicator)
+        const currentText = editor.state.doc.toString();
+        const results = await EvaluateLines(currentText, lineNumber);
         
         // Build new content from results
         const newLines = results.map(r => r.output);
         const newText = newLines.join('\n');
         
-        if (newText !== text) {
-            const scrollTop = editor.scrollDOM.scrollTop;
-            const scrollLeft = editor.scrollDOM.scrollLeft;
-            
-            editor.dispatch({
-                changes: { from: 0, to: editor.state.doc.length, insert: newText },
-            });
-            
-            // Restore scroll
-            requestAnimationFrame(() => {
-                editor.scrollDOM.scrollTop = scrollTop;
-                editor.scrollDOM.scrollLeft = scrollLeft;
-            });
-            
-            previousText = newText;
-            previousLineCount = newText.split('\n').length;
-        }
+        // Always update to clear any progress indicators
+        const scrollTop = editor.scrollDOM.scrollTop;
+        const scrollLeft = editor.scrollDOM.scrollLeft;
+        
+        editor.dispatch({
+            changes: { from: 0, to: editor.state.doc.length, insert: newText },
+        });
+        
+        // Restore scroll
+        requestAnimationFrame(() => {
+            editor.scrollDOM.scrollTop = scrollTop;
+            editor.scrollDOM.scrollLeft = scrollLeft;
+        });
+        
+        previousText = newText;
+        previousLineCount = newText.split('\n').length;
     } catch (err) {
         console.error('Evaluation error:', err);
     }
@@ -754,47 +754,48 @@ async function evaluateLineAndDependents(lineNumber) {
             }
         }
         
-        const results = await EvaluateLines(text, lineNumber);
+        // Evaluate using the CURRENT editor text (which may have the progress indicator)
+        const currentText = editor.state.doc.toString();
+        const results = await EvaluateLines(currentText, lineNumber);
         
         // Build new content from results
         const newLines = results.map(r => r.output);
         const newText = newLines.join('\n');
         
-        if (newText !== text) {
-            const scrollTop = editor.scrollDOM.scrollTop;
-            const scrollLeft = editor.scrollDOM.scrollLeft;
-            const cursorPos = editor.state.selection.main.head;
-            const cursorLine = editor.state.doc.lineAt(cursorPos);
-            const lineNumber = cursorLine.number;
-            const columnOffset = cursorPos - cursorLine.from;
+        // Always update to clear any progress indicators
+        const scrollTop = editor.scrollDOM.scrollTop;
+        const scrollLeft = editor.scrollDOM.scrollLeft;
+        const cursorPos = editor.state.selection.main.head;
+        const cursorLine = editor.state.doc.lineAt(cursorPos);
+        const currentLineNumber = cursorLine.number;
+        const columnOffset = cursorPos - cursorLine.from;
+        
+        isUpdatingEditor = true;
+        try {
+            editor.dispatch({
+                changes: { from: 0, to: editor.state.doc.length, insert: newText },
+            });
             
-            isUpdatingEditor = true;
-            try {
+            // Restore cursor position
+            const newDoc = editor.state.doc;
+            if (currentLineNumber <= newDoc.lines) {
+                const newLine = newDoc.line(currentLineNumber);
+                const newPos = newLine.from + Math.min(columnOffset, newLine.length);
                 editor.dispatch({
-                    changes: { from: 0, to: editor.state.doc.length, insert: newText },
+                    selection: { anchor: newPos },
                 });
-                
-                // Restore cursor position
-                const newDoc = editor.state.doc;
-                if (lineNumber <= newDoc.lines) {
-                    const newLine = newDoc.line(lineNumber);
-                    const newPos = newLine.from + Math.min(columnOffset, newLine.length);
-                    editor.dispatch({
-                        selection: { anchor: newPos },
-                    });
-                }
-                
-                // Restore scroll
-                requestAnimationFrame(() => {
-                    editor.scrollDOM.scrollTop = scrollTop;
-                    editor.scrollDOM.scrollLeft = scrollLeft;
-                });
-                
-                previousText = newText;
-                previousLineCount = newText.split('\n').length;
-            } finally {
-                isUpdatingEditor = false;
             }
+            
+            // Restore scroll
+            requestAnimationFrame(() => {
+                editor.scrollDOM.scrollTop = scrollTop;
+                editor.scrollDOM.scrollLeft = scrollLeft;
+            });
+            
+            previousText = newText;
+            previousLineCount = newText.split('\n').length;
+        } finally {
+            isUpdatingEditor = false;
         }
     } catch (err) {
         console.error('Evaluation error:', err);
@@ -937,28 +938,7 @@ async function recalculateAll() {
         // Strip all results and output lines
         const strippedText = await StripAllResults(text);
         
-        // Add progress indicators (= ⏳) to all expression lines
-        const strippedLines = strippedText.split('\n');
-        const withProgress = strippedLines.map(line => {
-            const trimmed = line.trim();
-            // Add progress indicator to lines with = but no result yet
-            if (trimmed.endsWith('=') && !trimmed.endsWith('==') && !trimmed.endsWith('!=') && 
-                !trimmed.endsWith('<=') && !trimmed.endsWith('>=')) {
-                return line + ' ⏳';
-            }
-            return line;
-        });
-        const progressText = withProgress.join('\n');
-        
-        // Show progress indicators immediately
-        editor.dispatch({
-            changes: { from: 0, to: editor.state.doc.length, insert: progressText },
-        });
-        
-        // Force a render to show progress indicators
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        
-        // Now evaluate all expressions in parallel
+        // Evaluate all expressions in parallel (no progress indicators for Ctrl+R since it's fast)
         const results = await EvaluateParallel(strippedText);
         const newLines = results.map(r => r.output);
         const newText = newLines.join('\n');
