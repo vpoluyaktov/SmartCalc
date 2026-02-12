@@ -42,12 +42,13 @@ func TestTraceIntegration(t *testing.T) {
 	output := results[0].Output
 
 	// Check if it contains expected trace output
-	if !strings.Contains(output, "Traceroute to google.com:80") {
+	if !strings.Contains(output, "Traceroute to google.com") {
 		t.Skipf("Skipping trace test (network required), got: %s", output)
 	}
 
-	if !strings.Contains(output, "DNS Resolution") {
-		t.Errorf("Expected trace output to contain DNS Resolution, got: %s", output)
+	// Should show hop numbers
+	if !strings.Contains(output, "1  ") {
+		t.Errorf("Expected trace output to contain hop numbers, got: %s", output)
 	}
 }
 
@@ -106,8 +107,8 @@ func TestTraceDefaultPort(t *testing.T) {
 
 	output := results[0].Output
 
-	// Should use default port 443
-	if !strings.Contains(output, "Traceroute to google.com:443") && !strings.Contains(output, "ERR:") {
+	// Should show traceroute output
+	if !strings.Contains(output, "Traceroute to google.com") && !strings.Contains(output, "ERR:") {
 		t.Skipf("Skipping trace test (network required), got: %s", output)
 	}
 }

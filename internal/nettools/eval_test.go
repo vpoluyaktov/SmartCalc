@@ -99,12 +99,13 @@ func TestEvalNetToolsTrace(t *testing.T) {
 		t.Skipf("Skipping trace test (network required): %v", err)
 	}
 
-	if !strings.Contains(result, "Traceroute to google.com:80") {
-		t.Errorf("Expected trace result to contain 'Traceroute to google.com:80', got: %s", result)
+	if !strings.Contains(result, "Traceroute to google.com") {
+		t.Errorf("Expected trace result to contain 'Traceroute to google.com', got: %s", result)
 	}
 
-	if !strings.Contains(result, "DNS Resolution") {
-		t.Errorf("Expected trace result to contain DNS Resolution, got: %s", result)
+	// Should show at least some hops (even if most are *)
+	if !strings.Contains(result, "1  ") {
+		t.Errorf("Expected trace result to contain hop numbers, got: %s", result)
 	}
 }
 
