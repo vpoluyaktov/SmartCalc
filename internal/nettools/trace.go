@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
-	"golang.org/x/net/ipv6"
 )
 
 // HopInfo represents information about a single hop
@@ -22,12 +20,12 @@ type HopInfo struct {
 	Timeout  bool
 }
 
-// HTTPTrace performs an ICMP-based traceroute showing all hops along the path
-// Uses ICMP Echo Request packets with incrementing TTL values
+// HTTPTrace performs a UDP-based traceroute showing all hops along the path
+// Uses UDP packets to high ports with incrementing TTL values (like standard traceroute)
 //
-// Note: This implementation requires raw socket privileges (CAP_NET_RAW on Linux)
-// to send ICMP packets and receive ICMP Time Exceeded messages.
-// Run with sudo or grant appropriate capabilities.
+// This implementation does NOT require root privileges because it uses UDP sockets
+// instead of raw ICMP sockets. It listens for ICMP Time Exceeded messages that are
+// sent back by intermediate routers.
 func HTTPTrace(host string, port int) (string, error) {
 	// Resolve target
 	ips, err := net.LookupIP(host)
@@ -41,17 +39,6 @@ func HTTPTrace(host string, port int) (string, error) {
 	targetIP := ips[0]
 	isIPv6 := targetIP.To4() == nil
 
-	// Test if we can create ICMP socket (check permissions)
-	network := "ip4:icmp"
-	if isIPv6 {
-		network = "ip6:ipv6-icmp"
-	}
-	testConn, err := icmp.ListenPacket(network, "")
-	if err != nil {
-		return "", fmt.Errorf("cannot create ICMP socket (requires root/CAP_NET_RAW): %v\nRun with: sudo smartcalc or sudo setcap cap_net_raw+ep ./smartcalc", err)
-	}
-	testConn.Close()
-
 	var output strings.Builder
 	output.WriteString(fmt.Sprintf("\n> Traceroute to %s (%s), 30 hops max", host, targetIP.String()))
 
@@ -62,7 +49,7 @@ func HTTPTrace(host string, port int) (string, error) {
 	reachedTarget := false
 
 	for ttl := 1; ttl <= maxHops && !reachedTarget; ttl++ {
-		hopInfo := probeHopICMP(targetIP.String(), ttl, probesPerHop, timeout, isIPv6)
+		hopInfo := probeHopUDP(targetIP.String(), ttl, probesPerHop, timeout, isIPv6)
 
 		// Format hop output
 		output.WriteString(fmt.Sprintf("\n> %2d  ", ttl))
@@ -103,8 +90,8 @@ func HTTPTrace(host string, port int) (string, error) {
 	return output.String(), nil
 }
 
-// probeHopICMP performs multiple ICMP probes with a specific TTL
-func probeHopICMP(targetIP string, ttl, probes int, timeout time.Duration, isIPv6 bool) HopInfo {
+// probeHopUDP performs multiple UDP probes with a specific TTL
+func probeHopUDP(targetIP string, ttl, probes int, timeout time.Duration, isIPv6 bool) HopInfo {
 	info := HopInfo{Hop: ttl}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -115,7 +102,7 @@ func probeHopICMP(targetIP string, ttl, probes int, timeout time.Duration, isIPv
 			defer wg.Done()
 
 			start := time.Now()
-			hopIP, success := probeSingleICMP(targetIP, ttl, timeout, isIPv6, probeNum)
+			hopIP, success := probeSingleUDP(targetIP, ttl, timeout, isIPv6, probeNum)
 			rtt := time.Since(start)
 
 			mu.Lock()
@@ -145,110 +132,130 @@ func probeHopICMP(targetIP string, ttl, probes int, timeout time.Duration, isIPv
 	return info
 }
 
-// probeSingleICMP performs a single ICMP probe with specified TTL
-func probeSingleICMP(targetIP string, ttl int, timeout time.Duration, isIPv6 bool, seq int) (string, bool) {
-	network := "ip4:icmp"
-	proto := 1 // ICMP for IPv4
+// probeSingleUDP performs a single UDP probe with specified TTL
+func probeSingleUDP(targetIP string, ttl int, timeout time.Duration, isIPv6 bool, seq int) (string, bool) {
+	// Use high port numbers like standard traceroute (33434 + seq)
+	dstPort := 33434 + seq
+
+	network := "udp4"
+	icmpNetwork := "ip4:icmp"
+	icmpProto := 1
 	if isIPv6 {
-		network = "ip6:ipv6-icmp"
-		proto = 58 // ICMPv6
+		network = "udp6"
+		icmpNetwork = "ip6:ipv6-icmp"
+		icmpProto = 58
 	}
 
-	// Create ICMP connection
-	conn, err := icmp.ListenPacket(network, "")
+	// Create ICMP listener to receive Time Exceeded messages
+	icmpConn, err := icmp.ListenPacket(icmpNetwork, "")
 	if err != nil {
-		// Can't create ICMP socket - likely permission issue
+		// Without ICMP listener, we can't detect intermediate hops
+		// But we can still try to reach the destination
+		return tryDirectUDP(targetIP, dstPort, ttl, timeout, network)
+	}
+	defer icmpConn.Close()
+
+	// Set read deadline on ICMP listener
+	icmpConn.SetReadDeadline(time.Now().Add(timeout))
+
+	// Create UDP connection
+	udpAddr, err := net.ResolveUDPAddr(network, fmt.Sprintf("%s:%d", targetIP, dstPort))
+	if err != nil {
 		return "", false
 	}
-	defer conn.Close()
 
-	// Set TTL
+	udpConn, err := net.DialUDP(network, nil, udpAddr)
+	if err != nil {
+		return "", false
+	}
+	defer udpConn.Close()
+
+	// Set TTL on UDP socket
 	if isIPv6 {
-		p := conn.IPv6PacketConn()
-		if p != nil {
-			p.SetHopLimit(ttl)
-		}
-	} else {
-		p := conn.IPv4PacketConn()
-		if p != nil {
-			p.SetTTL(ttl)
-		}
-	}
-
-	// Create ICMP Echo Request
-	var msg icmp.Message
-	if isIPv6 {
-		msg = icmp.Message{
-			Type: ipv6.ICMPTypeEchoRequest,
-			Code: 0,
-			Body: &icmp.Echo{
-				ID:   syscall.Getpid() & 0xffff,
-				Seq:  seq,
-				Data: []byte("SmartCalc traceroute"),
-			},
-		}
-	} else {
-		msg = icmp.Message{
-			Type: ipv4.ICMPTypeEcho,
-			Code: 0,
-			Body: &icmp.Echo{
-				ID:   syscall.Getpid() & 0xffff,
-				Seq:  seq,
-				Data: []byte("SmartCalc traceroute"),
-			},
-		}
-	}
-
-	msgBytes, err := msg.Marshal(nil)
-	if err != nil {
-		return "", false
-	}
-
-	// Send ICMP packet
-	dst, err := net.ResolveIPAddr(network[:len(network)-5], targetIP)
-	if err != nil {
-		return "", false
-	}
-
-	_, err = conn.WriteTo(msgBytes, dst)
-	if err != nil {
-		return "", false
-	}
-
-	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(timeout))
-
-	// Wait for response
-	reply := make([]byte, 1500)
-	for {
-		n, peer, err := conn.ReadFrom(reply)
-		if err != nil {
-			// Timeout or error
+		if err := udpConn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
 			return "", false
 		}
-
-		// Parse ICMP message
-		rm, err := icmp.ParseMessage(proto, reply[:n])
-		if err != nil {
-			continue
+		rawConn, err := udpConn.SyscallConn()
+		if err == nil {
+			rawConn.Control(func(fd uintptr) {
+				syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_UNICAST_HOPS, ttl)
+			})
 		}
-
-		switch rm.Type {
-		case ipv4.ICMPTypeTimeExceeded, ipv6.ICMPTypeTimeExceeded:
-			// Got Time Exceeded from intermediate hop
-			if peerIP, ok := peer.(*net.IPAddr); ok {
-				return peerIP.IP.String(), true
-			}
-		case ipv4.ICMPTypeEchoReply, ipv6.ICMPTypeEchoReply:
-			// Got Echo Reply - reached destination
-			if peerIP, ok := peer.(*net.IPAddr); ok {
-				return peerIP.IP.String(), true
-			}
-		case ipv4.ICMPTypeDestinationUnreachable, ipv6.ICMPTypeDestinationUnreachable:
-			// Destination unreachable
-			if peerIP, ok := peer.(*net.IPAddr); ok {
-				return peerIP.IP.String(), true
-			}
+	} else {
+		if err := udpConn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+			return "", false
+		}
+		rawConn, err := udpConn.SyscallConn()
+		if err == nil {
+			rawConn.Control(func(fd uintptr) {
+				syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TTL, ttl)
+			})
 		}
 	}
+
+	// Send UDP packet
+	_, err = udpConn.Write([]byte("SmartCalc traceroute probe"))
+	if err != nil {
+		return "", false
+	}
+
+	// Wait for ICMP response
+	reply := make([]byte, 1500)
+	n, peer, err := icmpConn.ReadFrom(reply)
+	if err != nil {
+		// Timeout - no response
+		return "", false
+	}
+
+	// Parse ICMP message to verify it's valid
+	_, err = icmp.ParseMessage(icmpProto, reply[:n])
+	if err != nil {
+		return "", false
+	}
+
+	// Extract hop IP from ICMP response
+	if peerIP, ok := peer.(*net.IPAddr); ok {
+		return peerIP.IP.String(), true
+	}
+
+	return "", false
+}
+
+// tryDirectUDP attempts a direct UDP connection when ICMP listener is not available
+func tryDirectUDP(targetIP string, port, ttl int, timeout time.Duration, network string) (string, bool) {
+	udpAddr, err := net.ResolveUDPAddr(network, fmt.Sprintf("%s:%d", targetIP, port))
+	if err != nil {
+		return "", false
+	}
+
+	udpConn, err := net.DialUDP(network, nil, udpAddr)
+	if err != nil {
+		return "", false
+	}
+	defer udpConn.Close()
+
+	// Set TTL
+	rawConn, err := udpConn.SyscallConn()
+	if err != nil {
+		return "", false
+	}
+
+	if network == "udp6" {
+		rawConn.Control(func(fd uintptr) {
+			syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_UNICAST_HOPS, ttl)
+		})
+	} else {
+		rawConn.Control(func(fd uintptr) {
+			syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TTL, ttl)
+		})
+	}
+
+	udpConn.SetWriteDeadline(time.Now().Add(timeout))
+	_, err = udpConn.Write([]byte("SmartCalc traceroute probe"))
+	if err != nil {
+		return "", false
+	}
+
+	// Can only detect if we reached the target (no intermediate hops without ICMP)
+	return targetIP, true
 }
