@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// createTimeval creates a syscall.Timeval with the correct type for macOS (int32)
+// createTimeval creates a syscall.Timeval for Darwin/macOS (Usec is int32)
 func createTimeval(timeout time.Duration) syscall.Timeval {
 	return syscall.Timeval{
 		Sec:  int64(timeout.Seconds()),

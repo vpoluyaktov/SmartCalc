@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// createTimeval creates a syscall.Timeval with the correct type for Linux (int64)
+// createTimeval creates a syscall.Timeval for Linux (Usec is int64)
 func createTimeval(timeout time.Duration) syscall.Timeval {
 	return syscall.Timeval{
 		Sec:  int64(timeout.Seconds()),
